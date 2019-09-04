@@ -2,13 +2,14 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/perf_event.h>
 #include <asm/unistd.h>
 
-#include "libperf-tlb-report/config.h"
-#include "libperf-tlb-report/queue.h"
+#include "libperf-tlb-report.h"
+#include "queue.h"
 
 // The only good-ish resource on this topic I could find is the manpage for perf_event_open(): http://man7.org/linux/man-pages/man2/perf_event_open.2.html
 // On using groups: https://stackoverflow.com/a/42092180/128240 butit doesn't seem to work well. In theory, we want our performance events to be grouped, so that they represent the same period of code execution. In reality, this seems to cause the events to be almost never actually run. Couldn't find anything online that'd explain this or propose a fix.
@@ -37,7 +38,7 @@ struct perf_event_desc {
   LIST_ENTRY(perf_event_desc) list;
 };
 
-#if USE_GROUPS
+#if LIBPERF_TLB_REPORT_USE_GROUPS
   struct perf_event_data {
     uint64_t value;      /* The value of the event */
     uint64_t id;         /* if PERF_FORMAT_ID */
@@ -71,38 +72,33 @@ static void perf_event_register(struct perf_event_desc *pe) {
   g_pe_list_length++;
 }
 
-#if USE_GROUPS
+#if LIBPERF_TLB_REPORT_USE_GROUPS
   #define PE_READ_FORMAT PERF_FORMAT_GROUP | PERF_FORMAT_ID | PERF_FORMAT_TOTAL_TIME_ENABLED | PERF_FORMAT_TOTAL_TIME_RUNNING
 #else
   #define PE_READ_FORMAT PERF_FORMAT_ID | PERF_FORMAT_TOTAL_TIME_ENABLED | PERF_FORMAT_TOTAL_TIME_RUNNING
 #endif
 
-#if ENABLED
-  #define DEFINE_PERF_COUNTER(NAME) \
-    static void CONCAT2(_pe_configure_, NAME)(struct perf_event_attr *this); \
-    \
-    static struct perf_event_desc CONCAT2(g_pe_, NAME) = { \
-      .name = #NAME, \
-      .config_func = &CONCAT2(_pe_configure_, NAME), \
-      .attrs = { \
-        .size = sizeof(struct perf_event_attr), \
-        .disabled = 1, \
-        .exclude_kernel = 0, \
-        .exclude_user = 0, \
-        .exclude_hv = 0, \
-        .read_format = PE_READ_FORMAT \
-      } \
-    }; \
-    \
-    __attribute__((constructor)) \
-    void CONCAT2(_register_pe_, NAME)(void) { \
-      perf_event_register(&CONCAT2(g_pe_, NAME)); \
+#define DEFINE_PERF_COUNTER(NAME) \
+  static void CONCAT2(_pe_configure_, NAME)(struct perf_event_attr *this); \
+  \
+  static struct perf_event_desc CONCAT2(g_pe_, NAME) = { \
+    .name = #NAME, \
+    .config_func = &CONCAT2(_pe_configure_, NAME), \
+    .attrs = { \
+      .size = sizeof(struct perf_event_attr), \
+      .disabled = 1, \
+      .exclude_kernel = 0, \
+      .exclude_user = 0, \
+      .exclude_hv = 0, \
+      .read_format = PE_READ_FORMAT \
     } \
-    static void CONCAT2(_pe_configure_, NAME)(struct perf_event_attr *this)
-#else
-  #define DEFINE_PERF_COUNTER(NAME) \
-    static void CONCAT2(_pe_dummy_, NAME)(struct perf_event_attr *this)
-#endif
+  }; \
+  \
+  __attribute__((constructor)) \
+  void CONCAT2(_register_pe_, NAME)(void) { \
+    perf_event_register(&CONCAT2(g_pe_, NAME)); \
+  } \
+  static void CONCAT2(_pe_configure_, NAME)(struct perf_event_attr *this)
 
 DEFINE_PERF_COUNTER(tlb_data_read_access) {
   this->type = PERF_TYPE_HW_CACHE;
@@ -159,10 +155,15 @@ static long perf_event_open(
 }
 
 void perfevents_init(void) {
-  LOG("ENABLED = %d\n", ENABLED);
-  LOG("DEBUG = %d\n", DEBUG);
-  LOG("USE_GROUPS = %d\n", USE_GROUPS);
-  LOG("STANDALONE = %d\n", STANDALONE);
+
+#if DEBUG
+  LOG("DEBUG = 1\n");
+#else
+  LOG("DEBUG = 0\n");
+#endif
+
+  LOG("USE_GROUPS = %d\n", LIBPERF_TLB_REPORT_USE_GROUPS);
+  LOG("STANDALONE = %d\n", LIBPERF_TLB_REPORT_STANDALONE);
 
   // initialize all performance events
   struct perf_event_desc *pe;
@@ -173,7 +174,7 @@ void perfevents_init(void) {
       &pe->attrs,
       /*pid=*/0,
       /*cpu=*/-1,
-      #if USE_GROUPS
+      #if LIBPERF_TLB_REPORT_USE_GROUPS
         /*group_fd=*/g_group_leader_fd,
       #else
         /*group_fd=*/-1,
@@ -262,7 +263,7 @@ void perfevents_finalize(void) {
   // report all performance events
   PRINT("\n[Performance events]\n");
 
-  #if USE_GROUPS
+  #if LIBPERF_TLB_REPORT_USE_GROUPS
     char data_buffer[sizeof(struct perf_event_group_data) + g_pe_count * sizeof(struct perf_event_data)];
     ssize_t rresult = read(g_group_leader_fd, data_buffer, sizeof(data_buffer));
 
@@ -273,8 +274,8 @@ void perfevents_finalize(void) {
     } else if (rresult < 0) {
       perror("Read error: ");
     } else {
-      ASSERT0(group_data->nr == g_pe_count);
-      ASSERT0(rresult == sizeof(data_buffer));
+      assert(group_data->nr == g_pe_count);
+      assert(rresult == sizeof(data_buffer));
 
       //PRINT("Time enabled: %lu, time running: %lu\n", group_data->time_enabled, group_data->time_running);
 
@@ -326,7 +327,7 @@ void perfevents_finalize(void) {
   g_pe_count = 0;
 }
 
-#if STANDALONE
+#if LIBPERF_TLB_REPORT_STANDALONE
   __attribute__((constructor))
   void perfevents_autoinit(void) {
     perfevents_init();
