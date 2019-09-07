@@ -1,30 +1,36 @@
-cmake_minimum_required(VERSION 2.6)
-project(libperf_tlb_report VERSION 0.9 LANGUAGES C)
+cmake_minimum_required(VERSION 3.5)
+project(libperf_tlb_report LANGUAGES C)
 
-option(STANDALONE ON "Whether to register a constructor and destructor to automatically call perfevents_init() and perfevents_finalize()")
-option(USE_GROUPS OFF "Whether to collect all performance events in a single group using PERF_FORMAT_GROUP. Experimental.")
+option(STANDALONE "Whether to register a constructor and destructor to automatically call perfevents_init() and perfevents_finalize()" ON)
+option(USE_GROUPS "Whether to collect all performance events in a single group using PERF_FORMAT_GROUP. Experimental." OFF)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/buildconfig.h.in"
   "${PROJECT_BINARY_DIR}/include/build/config.h"
+  @ONLY
 )
 
-set(BIN "perf-tlb-report")
+set(LIB "perf-tlb-report")
 
-add_library(${BIN}
+add_library(${LIB}
   src/libperf-tlb-report.c
 )
 
-target_include_directories(${BIN}
+target_include_directories(${LIB}
   PUBLIC
     "${PROJECT_BINARY_DIR}/include"
     "${PROJECT_SOURCE_DIR}"
 )
 
-target_compile_options(${BIN}
-  "-Wall"
-  "-Wextra"
-  "-Wno-macro-redefined"
+target_compile_options(${LIB}
+  PRIVATE
+    "-Wall"
+    "-Wextra"
+    "-Wno-macro-redefined"
 )
 
-target_compile_features(${BIN} PUBLIC c_std_11)
+set_target_properties(${LIB}
+  PROPERTIES
+    C_STANDARD 11
+    C_EXTENSIONS ON
+)

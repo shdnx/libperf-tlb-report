@@ -1,7 +1,11 @@
 #ifndef LIBPERF_TLB_REPORT_BUILDCONFIG_H
 #define LIBPERF_TLB_REPORT_BUILDCONFIG_H
 
-#define LIBPERF_TLB_REPORT_USE_GROUPS ${USE_GROUPS}
-#define LIBPERF_TLB_REPORT_STANDALONE ${STANDALONE}
+// this is a hack so that C is able to translate the CMake ON/OFF that results from the below substitutions to values it can understand
+#define ON 1
+#define OFF 0
+
+#define LIBPERF_TLB_REPORT_USE_GROUPS @USE_GROUPS@
+#define LIBPERF_TLB_REPORT_STANDALONE @STANDALONE@
 
 #endif
