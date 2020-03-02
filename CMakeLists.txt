@@ -13,7 +13,7 @@ configure_file(
 set(LIB "perf-tlb-report")
 
 add_library(${LIB}
-  src/libperf-tlb-report.c
+  libperf-tlb-report.c
 )
 
 target_include_directories(${LIB}
