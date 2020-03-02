@@ -10,7 +10,7 @@ Configure using CMake and then build using your favoite build engine like GNU Ma
 cd libperf-tlb-report
 mkdir build
 cd build
-cmake -G Ninja -D STANDALONE=On -D USE_GROUPS=Off ..
+cmake -G Ninja -D STANDALONE=ON -D USE_GROUPS=OFF ..
 ninja
 ```
 
